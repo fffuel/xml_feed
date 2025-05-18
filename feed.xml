@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<products>
+  <product>
+    <sku>ÖRNEK001</sku>
+    <name><![CDATA[ Örnek Ürün ]]></name>
+    <price>19.90</price>
+    <quantity>100</quantity>
+  </product>
+</products>
