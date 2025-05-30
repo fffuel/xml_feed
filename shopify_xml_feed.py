@@ -58,9 +58,16 @@ def fetch_all_products():
 
 # ----------------------------------------
 # 3) XML feed’i oluştur ("Default Title" varyantını atla)
+#    – Ayrıca her seferinde değişecek bir generatedAt özniteliği ekliyoruz
 # ----------------------------------------
 def build_products_feed(products):
-    root = Element("products", {"xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance"})
+    root = Element(
+        "products",
+        {
+            "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
+            "generatedAt": datetime.now().isoformat()
+        }
+    )
 
     for p in products:
         handle       = p.get('handle', '')
@@ -133,11 +140,11 @@ def write_xml(element, filename="feed.xml"):
     ElementTree(element).write(filename, encoding="utf-8", xml_declaration=True)
 
 # ----------------------------------------
-# 5) GitHub push (tüm değişiklikleri stage et, commit->push)
+# 5) GitHub push (sadece feed.xml)
 # ----------------------------------------
 def push_to_github(filename="feed.xml"):
-    # 1) Çalışma dizinindeki tüm değişiklikleri stage et (ekleme, silme, modifiye)
-    subprocess.run(["git", "add", "-A"], check=True)
+    # 1) Sadece feed.xml'i stage et
+    subprocess.run(["git", "add", filename], check=True)
 
     # 2) Staged değişiklik kalmış mı kontrol et
     diff = subprocess.run(["git", "diff", "--cached", "--exit-code"])
@@ -145,7 +152,7 @@ def push_to_github(filename="feed.xml"):
         print("🔄 Yeni değişiklik yok; push atlandı.")
         return
 
-    # 3) Commit, rebase pull ve push
+    # 3) Commit → pull --rebase → push
     msg = f"Update feed at {datetime.now().isoformat()}"
     subprocess.run(["git", "commit", "-m", msg], check=True)
     subprocess.run(["git", "pull", "--rebase"], check=True)
