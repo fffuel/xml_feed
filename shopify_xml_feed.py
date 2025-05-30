@@ -7,11 +7,17 @@ from datetime import datetime
 # ----------------------------------------
 # 1) Ayarlar
 # ----------------------------------------
-ACCESS_TOKEN = "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"
-STORE_NAME   = "fliqa-online"
-API_VERSION  = "2025-04"
-BASE_URL     = f"https://{STORE_NAME}.myshopify.com/admin/api/{API_VERSION}/"
-HEADERS      = {"X-Shopify-Access-Token": ACCESS_TOKEN, "Content-Type": "application/json"}
+ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
+if not ACCESS_TOKEN:
+    raise RuntimeError("❌ SHOPIFY_ACCESS_TOKEN ortam değişkeni tanımlı değil!")
+
+STORE_NAME  = "fliqa-online"
+API_VERSION = "2025-04"
+BASE_URL    = f"https://{STORE_NAME}.myshopify.com/admin/api/{API_VERSION}/"
+HEADERS     = {
+    "X-Shopify-Access-Token": ACCESS_TOKEN,
+    "Content-Type": "application/json"
+}
 
 # ----------------------------------------
 # 2) Ürünleri çek (options, images, variants ve vendor dahil)
@@ -27,11 +33,7 @@ def fetch_all_products():
             "fields": "id,handle,product_type,title,body_html,options,images,variants,vendor"
         }
         try:
-            resp = requests.get(
-                BASE_URL + "products.json",
-                headers=HEADERS,
-                params=params
-            )
+            resp = requests.get(BASE_URL + "products.json", headers=HEADERS, params=params)
             resp.raise_for_status()
         except requests.exceptions.HTTPError as err:
             status = err.response.status_code if err.response else None
@@ -76,6 +78,7 @@ def build_products_feed(products):
             if price_v < 5 or qty_v <= 0:
                 continue
 
+            # Varyant etiketleri
             variant_labels = []
             for idx, opt in enumerate(options_meta):
                 name = opt.get('name', '').strip()
@@ -85,26 +88,32 @@ def build_products_feed(products):
 
             prod = SubElement(root, "product")
 
+            # <name>
             label_text = title
             if variant_labels:
                 label_text += " - " + " / ".join(variant_labels)
             SubElement(prod, "name").text = label_text
 
+            # SKU, URL
             SubElement(prod, "sku").text = v.get('sku', '')
             SubElement(prod, "url").text = f"https://fliqa.com.tr/products/{handle}?variant={v.get('id')}"
 
+            # brand
             SubElement(prod, "brand").text = brand
 
+            # Seçenekler
             for idx, opt in enumerate(options_meta):
                 tag_name = opt.get('name', '').replace(' ', '')
                 val = v.get(f"option{idx+1}", '').strip()
                 if tag_name and val and val != 'Default Title':
                     SubElement(prod, tag_name).text = val
 
+            # Görseller
             for idx_i, img in enumerate(images):
                 tag = "imgUrl" if idx_i == 0 else f"imgUrl{idx_i}"
                 SubElement(prod, tag).text = img.get('src', '')
 
+            # Diğer alanlar
             SubElement(prod, "productCategory").text     = category
             SubElement(prod, "description").text         = description
             SubElement(prod, "price").text               = str(price_v)
@@ -124,20 +133,18 @@ def write_xml(element, filename="feed.xml"):
     ElementTree(element).write(filename, encoding="utf-8", xml_declaration=True)
 
 # ----------------------------------------
-# 5) GitHub push (pull --rebase ve değişiklik kontrolü eklenerek)
+# 5) GitHub push (pull --rebase ve değişiklik kontrolü)
 # ----------------------------------------
 def push_to_github(filename="feed.xml"):
-    # Stage hem XML feed hem de script dosyasını
     script_file = os.path.basename(__file__)
     subprocess.run(["git", "add", filename, script_file], check=True)
 
-    # Eğer staging area boşsa (yeni değişiklik yoksa) commit atma
+    # Eğer yeni değişiklik yoksa atla
     diff = subprocess.run(["git", "diff", "--cached", "--exit-code"])
     if diff.returncode == 0:
-        print("🔄 Commitlenecek yeni değişiklik yok; push işlemi atlandı.")
+        print("🔄 Yeni değişiklik yok; push atlandı.")
         return
 
-    # Commit, pull --rebase ve push
     msg = f"Update feed at {datetime.now().isoformat()}"
     subprocess.run(["git", "commit", "-m", msg], check=True)
     subprocess.run(["git", "pull", "--rebase"], check=True)
